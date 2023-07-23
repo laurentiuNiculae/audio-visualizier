@@ -1,5 +1,13 @@
 package utils
 
+import (
+	"math"
+	"os"
+
+	"github.com/go-audio/audio"
+	"github.com/go-audio/wav"
+)
+
 type numbers interface {
 	int | int8 | int16 | int32 | int64 | float32 | float64 | uint | uint8 | uint16 | uint32 | uint64
 }
@@ -64,4 +72,75 @@ func Clamp[T numbers](x, low, high T) T {
 	}
 
 	return x
+}
+
+func InitializeAudioData(file string) (*audio.IntBuffer, []float32) {
+	f, err := os.Open(file)
+	if err != nil {
+		panic(err)
+	}
+
+	decod := wav.NewDecoder(f)
+	decod.ReadInfo()
+
+	PCM, err := decod.FullPCMBuffer()
+	if err != nil {
+		panic(err)
+	}
+
+	fData := PCM.AsFloat32Buffer().Data
+
+	return PCM, fData
+}
+
+func InitializeAudioData64(file string) (*audio.IntBuffer, []float64) {
+	f, err := os.Open(file)
+	if err != nil {
+		panic(err)
+	}
+
+	decod := wav.NewDecoder(f)
+	decod.ReadInfo()
+
+	PCM, err := decod.FullPCMBuffer()
+	if err != nil {
+		panic(err)
+	}
+
+	fData := PCM.AsFloat32Buffer().Data
+
+	fData64 := make([]float64, len(fData))
+
+	for i := range fData {
+		fData64[i] = float64(fData[i])
+	}
+
+	return PCM, fData64
+}
+
+func Downsample[T numbers](slice []T, newSize int, reducer func(subSlice ...T) T) []T {
+	result := make([]T, newSize)
+	progress := float64(0.0)
+
+	lastProcessedIndex := 0
+	step := float64(len(slice)) / float64(newSize)
+
+	// we'll iterate untill right before the last element
+	// float addition can have errors so the last element might be lost if we're not careful
+	for i := 0; i < newSize-1; i++ {
+		progress += step
+
+		poolingIntervalSize, _ := math.Modf(progress)
+
+		start := lastProcessedIndex
+		end := start + int(poolingIntervalSize)
+		result[i] = reducer(slice[start:end]...)
+
+		lastProcessedIndex = end
+		progress -= poolingIntervalSize
+	}
+
+	result[newSize-1] = reducer(slice[lastProcessedIndex:]...)
+
+	return result
 }
