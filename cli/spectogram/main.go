@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"math/cmplx"
 	"os"
+	"slices"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 	"github.com/laurentiuNiculae/audio-visualizier/pkg/utils"
@@ -12,14 +12,15 @@ import (
 
 const (
 	width  = 1200
-	height = 600
+	height = 800
+)
 
+var (
 	graphStartX = 20
 	graphStartY = int32(height / 2)
 	graphEndX   = width - 20
 	graphWidth  = graphEndX - graphStartX
 	graphHeight = height - 100
-	speed       = 2 * graphEndX
 )
 
 func main() {
@@ -32,27 +33,41 @@ func main() {
 	}
 
 	backgroundColor := rl.GetColor(0x181818FF)
+	rl.ClearBackground(backgroundColor)
 
 	_, fData64 := utils.InitializeAudioData64(os.Args[1])
 
-	hopLength := 512
-	sampleWindow := 2048
+	hopLength := 512 * 2
+	sampleWindow := 2048 * 6
+
+	graphWidth = utils.Min(graphWidth, len(fData64))
 
 	buff := make([][]float64, 0, graphWidth)
 
 	for !rl.WindowShouldClose() {
 		rl.BeginDrawing()
-		rl.ClearBackground(backgroundColor)
 		rl.DrawText("Press 'q' to quit or 'r' to restart.", 10, 15, 15, rl.White)
 
-		if len(buff) != graphWidth {
+		if len(buff) == 0 {
 			xCoordProgress := 0 // measured in pixels
+			window := make([]float64, sampleWindow)
+			hammingWindow := utils.GetHammingValues(sampleWindow)
+
 			for i := 0; i < graphWidth && i*hopLength < len(fData64); i++ {
 				fftFrameStart := i * hopLength
-				fftFrameEnd := fftFrameStart + sampleWindow
+				fftFrameEnd := utils.Min(fftFrameStart+sampleWindow, len(fData64)-1)
+
+				// apply window
+				copy(window, fData64[fftFrameStart:fftFrameEnd])
+				for i := range window {
+					window[i] = window[i] * hammingWindow[i]
+				}
 
 				// get the component frequencies
-				fftRez := fft.FFTReal(fData64[fftFrameStart:fftFrameEnd])
+				fftRez := fft.FFTReal(window)
+
+				// the top half is just symetric of the bottom half
+				fftRez = fftRez[:len(fftRez)/2]
 
 				// convert to real numbers by taking the abs, modulus
 				freqMagnitutes := make([]float64, len(fftRez))
@@ -62,22 +77,18 @@ func main() {
 				}
 
 				// downsample the frequency magnitude slice to fit int the screen
-				drawingBuffer := utils.Downsample(freqMagnitutes, graphHeight, utils.Max[float64])
+				drawingBuffer := utils.LogDownsample(freqMagnitutes, graphHeight, utils.Max[float64])
 
+				slices.Reverse(drawingBuffer)
 				buff = append(buff, drawingBuffer)
 
 				xCoordProgress += hopLength
 			}
-		}
 
-		prog := float64(width) / float64(rl.GetMouseX())
-		brightness := 1 + 1*prog
-
-		fmt.Println(prog, brightness)
-
-		for x := graphStartX; x < graphEndX && x < len(buff); x++ {
-			for y := graphStartY - graphHeight/2; y < graphHeight; y++ {
-				rl.DrawPixel(int32(x), int32(y), getColorFrom(buff[x][y], brightness))
+			for x := graphStartX; x < graphEndX && x < len(buff); x++ {
+				for y := graphStartY - int32(graphHeight)/2; y < int32(graphHeight); y++ {
+					rl.DrawPixel(int32(x), int32(y), getColorFrom(buff[x][y], 10))
+				}
 			}
 		}
 
