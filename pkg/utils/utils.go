@@ -144,3 +144,53 @@ func Downsample[T numbers](slice []T, newSize int, reducer func(subSlice ...T) T
 
 	return result
 }
+
+func LogDownsample[T numbers](slice []T, newSize int, reducer func(subSlice ...T) T) []T {
+	result := make([]T, newSize)
+	lastProcessedIndex := 0
+	factor := math.Pow(float64(len(slice)), float64(1)/float64(newSize))
+
+	i := float64(factor)
+	outIndex := 0
+	progress := float64(0)
+	poolingIntervalSize := float64(0)
+	// we'll iterate untill right before the last element
+	// float addition can have errors so the last element might be lost if we're not careful
+	for ; i*factor < float64(len(slice)); i *= factor {
+		step := i*factor - i
+		progress += step
+
+		poolingIntervalSize, progress = math.Modf(progress)
+
+		start := lastProcessedIndex
+		end := lastProcessedIndex + int(poolingIntervalSize)
+
+		result[outIndex] = reducer(slice[start:end]...)
+		outIndex++
+		lastProcessedIndex = end
+	}
+
+	lastBigValue := T(0)
+
+	for i := len(result) - 1; i >= 0; i-- {
+		if result[i] == 0 {
+			result[i] = lastBigValue
+		}
+
+		if result[i] > 0 {
+			lastBigValue = result[i]
+		}
+	}
+
+	return result
+}
+
+func GetHammingValues(size int) []float64 {
+	hamming := make([]float64, size)
+
+	for i := 0; i < size; i++ {
+		hamming[i] = 0.54 - 0.4*math.Cos(2*math.Pi*float64(i)/(float64(size)-1))
+	}
+
+	return hamming
+}
