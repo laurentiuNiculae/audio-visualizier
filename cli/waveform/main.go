@@ -32,13 +32,14 @@ func main() {
 		backgroundColor = rl.GetColor(0x181818FF)
 	)
 
+	if len(os.Args) == 1 {
+		fmt.Println("ERROR: give at least 1 .wav file name")
+		return
+	}
+
 	rl.InitWindow(width, height, "raylib waveform")
 	defer rl.CloseWindow()
 	rl.SetTargetFPS(60)
-
-	if len(os.Args) == 1 {
-		panic("give at least 1 .wav file name")
-	}
 
 	PCM, fData := utils.InitializeAudioData(os.Args[1])
 
@@ -47,13 +48,13 @@ func main() {
 	for !rl.WindowShouldClose() {
 		rl.BeginDrawing()
 		rl.ClearBackground(backgroundColor)
-		rl.DrawText("Press 'q' to quit or 'r' to restart.", 10, 15, 15, rl.White)
+		rl.DrawText("Press 'q' to quit or click and drag to select then press 'e' to zoom into the selected area.", 10, 15, 15, rl.White)
 
 		gesture := rl.GetGestureDetected()
 
 		if rl.IsKeyPressed(rl.KeyQ) {
 			return
-		} else if rl.IsKeyPressed(rl.KeyR) {
+		} else if rl.IsKeyPressed(rl.KeyE) {
 			rl.ClearBackground(backgroundColor)
 			waveformBuff = []utils.SamplePixelOffsetRange{}
 
